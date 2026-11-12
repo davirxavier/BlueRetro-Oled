@@ -70,14 +70,8 @@ static const buzzer_note_t song_button[] = {
     {988, 100}, {1319, 450}
 };
 
-static const buzzer_note_t song_confirm[] = {
+static const buzzer_note_t song_change[] = {
     {1319, 70}, {1760, 140}
-};
-
-static const buzzer_note_t song_back[] = {
-    {800, 12}, {755, 12}, {710, 12}, {665, 12}, {620, 12}, {575, 12}, {530, 12}, {485, 12}, {440, 12}, {395, 12}, {350, 12}, {305, 12}, {260, 12}, {0, 40},
-    {800, 12}, {755, 12}, {710, 12}, {665, 12}, {620, 12}, {575, 12}, {530, 12}, {485, 12}, {440, 12}, {395, 12}, {350, 12}, {305, 12}, {260, 12}, {0, 40},
-    {800, 12}, {755, 12}, {710, 12}, {665, 12}, {620, 12}, {575, 12}, {530, 12}, {485, 12}, {440, 12}, {395, 12}, {350, 12}, {305, 12}, {260, 12}
 };
 
 static const buzzer_song_data_t songs[BUZZER_SONG_MAX] = {
@@ -88,8 +82,7 @@ static const buzzer_song_data_t songs[BUZZER_SONG_MAX] = {
     [BUZZER_SONG_DISCONNECTED] = {song_disconnected, sizeof(song_disconnected) / sizeof(song_disconnected[0])},
     [BUZZER_SONG_ERROR] = {song_error, sizeof(song_error) / sizeof(song_error[0])},
     [BUZZER_SONG_BUTTON] = {song_button, sizeof(song_button) / sizeof(song_button[0])},
-    [BUZZER_SONG_CONFIRM] = {song_confirm, sizeof(song_confirm) / sizeof(song_confirm[0])},
-    [BUZZER_SONG_BACK] = {song_back, sizeof(song_back) / sizeof(song_back[0])}
+    [BUZZER_SONG_CHANGE] = {song_change, sizeof(song_change) / sizeof(song_change[0])}
 };
 
 static void buzzer_silence(void)

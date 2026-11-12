@@ -324,7 +324,7 @@ void oled_cmd(uint8_t cmd)
             if (current_screen == OLED_SCREEN_HOME)
             {
                 current_screen = OLED_SCREEN_TEST;
-                buzzer_play(BUZZER_SONG_CONFIRM);
+                buzzer_play(BUZZER_SONG_CHANGE);
             }
             break;
         }
@@ -333,7 +333,7 @@ void oled_cmd(uint8_t cmd)
             if (current_screen == OLED_SCREEN_TEST)
             {
                 current_screen = OLED_SCREEN_HOME;
-                buzzer_play(BUZZER_SONG_CONFIRM);
+                buzzer_play(BUZZER_SONG_CHANGE);
             }
             else
             {

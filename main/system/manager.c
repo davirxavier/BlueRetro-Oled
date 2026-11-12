@@ -679,6 +679,12 @@ void sys_mgr_init(uint32_t package) {
 
     internal_flag_init();
 
+#ifdef CONFIG_BLUERETRO_HW2
+    if (wired_adapter.system_id == PS2) {
+        hw_config.ports_sense_input_polarity = 0;
+    }
+#endif
+
     hw_config_patch();
 
     err_led_cfg_update();

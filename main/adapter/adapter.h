@@ -524,6 +524,13 @@ struct bt_data_base {
     uint16_t vid;
     uint16_t pid;
     uint8_t output[128];
+
+    /* Battery information */
+    uint8_t battery_percent;
+    uint8_t battery_status;
+    bool battery_charging;
+    bool battery_full;
+    bool battery_valid;
 };
 
 struct bt_data {

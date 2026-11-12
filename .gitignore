@@ -68,3 +68,8 @@ __pycache__/
 trace/
 **/.DS_Store
 
+.pio
+managed_components
+dependencies.lock
+sdkconfig.*
+!sdkconfig.defaults

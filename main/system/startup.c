@@ -213,9 +213,10 @@ static void do_secondary_init(void)
 static void start_cpu0_default(void)
 {
 #ifdef BLUERETRO
-    // Init Core1
+#ifndef BLUERETRO_WOKWI
     init_app_cpu_baremetal();
     ESP_EARLY_LOGI(TAG, "App cpu up.");
+#endif
 #endif
 
     // Initialize core components and services.

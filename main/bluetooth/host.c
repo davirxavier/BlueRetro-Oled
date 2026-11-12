@@ -746,3 +746,8 @@ void bt_host_bridge(struct bt_dev *device, uint8_t report_id, uint8_t *data, uin
 #endif
 #endif
 }
+
+bool bt_host_is_inquiry_active(void)
+{
+    return bt_hci_get_inquiry();
+}

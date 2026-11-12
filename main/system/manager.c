@@ -13,10 +13,6 @@
 #include <esp_system.h>
 #include <soc/efuse_reg.h>
 #include "driver/gpio.h"
-#include "hal/ledc_hal.h"
-#include "hal/gpio_hal.h"
-#include "driver/ledc.h"
-#include "esp_rom_gpio.h"
 #include "adapter/adapter.h"
 #include "adapter/config.h"
 #include "adapter/memory_card.h"
@@ -25,9 +21,11 @@
 #include "wired/wired_bare.h"
 #include "tools/util.h"
 #include "system/fs.h"
-#include "system/led.h"
 #include "bare_metal_app_cpu.h"
 #include "manager.h"
+
+#include "interface/buzzer.h"
+#include "interface/led_strip_control.h"
 
 #define BOOT_BTN_PIN 0
 
@@ -47,11 +45,6 @@
 #define SENSE_P1_ALT_PIN 15
 #define SENSE_P2_ALT_PIN 34
 
-#define LED_P1_PIN 2
-#define LED_P2_PIN 4
-#define LED_P3_PIN 12
-#define LED_P4_PIN 15
-
 #define INHIBIT_CNT 200
 
 typedef void (*sys_mgr_cmd_t)(void);
@@ -68,13 +61,7 @@ static uint8_t sense_list[] = {
     SENSE_P1_PIN, SENSE_P2_PIN, SENSE_P3_PIN, SENSE_P4_PIN
 };
 #endif
-static uint8_t led_list[] = {
-    LED_P1_PIN, LED_P2_PIN, LED_P3_PIN, LED_P4_PIN
-};
-static uint8_t current_pulse_led = LED_P1_PIN;
-static uint8_t err_led_pin;
 static uint8_t power_off_pin = POWER_OFF_PIN;
-static uint8_t led_init_cnt = 1;
 static uint16_t port_state = 0;
 static RingbufHandle_t cmd_q_hdl = NULL;
 static uint32_t chip_package = EFUSE_RD_CHIP_VER_PKG_ESP32D0WDQ6;
@@ -151,19 +138,6 @@ static inline void set_sense_out(uint32_t pin, uint32_t state) {
     }
 }
 
-static inline void set_port_led(uint32_t index, uint32_t state) {
-    if (state) {
-        esp_rom_gpio_connect_out_signal(led_list[index], ledc_periph_signal[LEDC_LOW_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_1, 0, 0);
-    }
-    else {
-        esp_rom_gpio_connect_out_signal(led_list[index], ledc_periph_signal[LEDC_LOW_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_2, 0, 0);
-    }
-}
-
-static inline uint32_t get_port_led_pin(uint32_t index) {
-    return led_list[index];
-}
-
 static void internal_flag_init(void) {
 #ifdef CONFIG_BLUERETRO_HW2
     if (hw_config.power_pin_polarity) {
@@ -184,37 +158,6 @@ static void internal_flag_init(void) {
     }
     else {
         printf("# %s: Internal adapter\n", __FUNCTION__);
-    }
-}
-
-static void port_led_pulse(uint32_t pin) {
-    if (pin) {
-        PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pin], PIN_FUNC_GPIO);
-        gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-        esp_rom_gpio_connect_out_signal(pin, ledc_periph_signal[LEDC_HIGH_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_0, 0, 0);
-    }
-}
-
-static void set_leds_as_btn_status(uint8_t state) {
-    ledc_set_duty_and_update(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, hw_config.led_flash_on_duty_cycle, 0);
-
-    /* Use all port LEDs */
-    for (uint32_t i = 0; i < hw_config.port_cnt; i++) {
-        uint8_t pin = led_list[i];
-
-        PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pin], PIN_FUNC_GPIO);
-        gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-        if (state) {
-            esp_rom_gpio_connect_out_signal(pin, ledc_periph_signal[LEDC_LOW_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_1, 0, 0);
-        }
-    }
-
-    /* Use error LED as well */
-    if (state) {
-        esp_rom_gpio_connect_out_signal(err_led_pin, ledc_periph_signal[LEDC_LOW_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_1, 0, 0);
-    }
-    else {
-        esp_rom_gpio_connect_out_signal(err_led_pin, ledc_periph_signal[LEDC_HIGH_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_0, 0, 0);
     }
 }
 
@@ -267,28 +210,22 @@ static void power_on_hdl(void) {
 #endif /* CONFIG_BLUERETRO_HW2 */
 }
 
+
 static void wired_port_hdl(void) {
     uint32_t update = 0;
     uint16_t port_mask = 0;
-    uint8_t err_led_set = 0;
-
     for (int32_t i = 0, j = 0, idx = 0; i < BT_MAX_DEV; i++) {
         struct bt_dev *device = NULL;
         uint8_t bt_ready = 0;
-
         bt_host_get_dev_from_id(i, &device);
-
         for (; j < hw_config.port_cnt; j++) {
             if (sense_port_is_empty(j)) {
                 j++;
                 break;
             }
-            set_port_led(j, 0);
             idx++;
         }
-
         bt_ready = atomic_test_bit(&device->flags, BT_DEV_HID_INIT_DONE);
-
 #ifdef CONFIG_BLUERETRO_HW2
         int32_t prev_idx = device->ids.out_idx;
 #endif
@@ -297,37 +234,12 @@ static void wired_port_hdl(void) {
             port_mask |= BIT(idx) | adapter_get_out_mask(idx);
         }
         idx++;
-
-
-        if (device->ids.out_idx < hw_config.port_cnt) {
-            if (bt_ready) {
-                set_port_led(device->ids.out_idx, 1);
-            }
-            else if (get_port_led_pin(device->ids.out_idx) != current_pulse_led) {
-                set_port_led(device->ids.out_idx, 0);
-            }
-        }
-
-        if (!bt_ready && !err_led_set) {
-            uint8_t new_led = (device->ids.out_idx < hw_config.port_cnt) ? get_port_led_pin(device->ids.out_idx) : 0;
-
-            if (bt_hci_get_inquiry()) {
-                port_led_pulse(new_led);
-                err_led_set = 1;
-                current_pulse_led = new_led;
-            }
-            else {
-                current_pulse_led = 0;
-            }
-        }
-
 #ifdef CONFIG_BLUERETRO_HW2
         if (device->ids.out_idx != prev_idx) {
             update++;
             printf("# %s: BTDEV %ld map to WIRED %ld\n", __FUNCTION__, i, device->ids.out_idx);
             if (bt_ready) {
                 struct raw_fb fb_data = {0};
-
                 fb_data.header.wired_id = device->ids.out_idx;
                 fb_data.header.type = FB_TYPE_PLAYER_LED;
                 fb_data.header.data_len = 0;
@@ -374,13 +286,9 @@ static void boot_btn_hdl(void) {
     check_qdp = 0;
 
     if (sys_mgr_get_boot_btn()) {
-        set_leds_as_btn_status(1);
-
         while (sys_mgr_get_boot_btn()) {
             hold_cnt++;
             if (hold_cnt > (hw_config.sw_io0_hold_thres_ms[state] / 10) && state < SYS_MGR_BTN_STATE3) {
-                ledc_set_duty_and_update(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, hw_config.led_flash_duty_cycle, 0);
-                ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_1, hw_config.led_flash_hz[state]);
                 state++;
             }
             if (hold_cnt == 3000) {
@@ -434,37 +342,76 @@ static void boot_btn_hdl(void) {
             }
         }
 
-        set_leds_as_btn_status(0);
         inhibit_cnt = INHIBIT_CNT;
     }
 }
 
 static void sys_mgr_task(void *arg) {
+    static bool connection_state_initialized = false;
+    static bool previous_controller_connected = false;
+
     uint32_t cnt = 0;
     uint8_t *cmd;
     size_t cmd_len;
+    ws2812_status_t last_status = WS2812_STATUS_BOOTING;
 
     while (1) {
         boot_btn_hdl();
 
-        /* Fetch system cmd to execute */
         if (cmd_q_hdl) {
             cmd = (uint8_t *)xRingbufferReceive(cmd_q_hdl, &cmd_len, 0);
             if (cmd) {
-                if (sys_mgr_cmds[*cmd]) {
-                    sys_mgr_cmds[*cmd]();
-                }
+                if (*sys_mgr_cmds[*cmd]) sys_mgr_cmds[*cmd]();
                 vRingbufferReturnItem(cmd_q_hdl, (void *)cmd);
             }
         }
 
-        /* Update those only 1/32 loop */
         if ((cnt & 0x1F) == 0x1F) {
             wired_port_hdl();
-            if (!hw_config.external_adapter) {
-                power_on_hdl();
-            }
+            if (!hw_config.external_adapter) power_on_hdl();
         }
+
+        ws2812_status_t status;
+        struct bt_dev *device = NULL;
+        bool controller_connected = sys_mgr_get_power() && bt_host_get_active_dev(&device) >= 0;
+        bool just_disconnected = false;
+
+        if (!connection_state_initialized) {
+            previous_controller_connected = controller_connected;
+            connection_state_initialized = true;
+        } else if (controller_connected != previous_controller_connected) {
+            if (controller_connected) {
+                buzzer_play(BUZZER_SONG_CONNECTED);
+            } else {
+                buzzer_play(BUZZER_SONG_DISCONNECTED);
+                just_disconnected = true;
+            }
+            previous_controller_connected = controller_connected;
+        }
+
+        if (!sys_mgr_get_power()) {
+            status = WS2812_STATUS_OFF;
+        } else if (bt_hci_get_inquiry()) {
+            status = WS2812_STATUS_PAIRING;
+        } else {
+            status = controller_connected ? WS2812_STATUS_CONNECTED : WS2812_STATUS_READY;
+        }
+
+        if (status != last_status) {
+            ws2812_status_set(status);
+            switch (status) {
+                case WS2812_STATUS_READY:
+                    if (!just_disconnected) buzzer_play(BUZZER_SONG_READY);
+                    break;
+                case WS2812_STATUS_PAIRING:
+                    buzzer_play(BUZZER_SONG_PAIRING);
+                    break;
+                default:
+                    break;
+            }
+            last_status = status;
+        }
+
         cnt++;
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -592,25 +539,6 @@ void sys_mgr_init(uint32_t package) {
     gpio_config(&io_conf);
 
     chip_package = package;
-    err_led_pin = err_led_get_pin();
-
-    ledc_timer_config_t ledc_timer = {
-        .duty_resolution = LEDC_TIMER_20_BIT,
-        .freq_hz = 2,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .timer_num = LEDC_TIMER_1,
-        .clk_cfg = LEDC_AUTO_CLK,
-    };
-    ledc_channel_config_t ledc_channel = {
-        .channel    = LEDC_CHANNEL_1,
-        .duty       = hw_config.led_flash_on_duty_cycle,
-        .gpio_num   = LED_P1_PIN,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .hpoint     = 0,
-        .timer_sel  = LEDC_TIMER_1,
-    };
-    ledc_timer_config(&ledc_timer);
-    ledc_channel_config(&ledc_channel);
 
     while (wired_adapter.system_id <= WIRED_AUTO) {
         boot_btn_hdl();
@@ -687,13 +615,6 @@ void sys_mgr_init(uint32_t package) {
 
     hw_config_patch();
 
-    err_led_cfg_update();
-
-    led_init_cnt = hw_config.port_cnt;
-    if (wired_adapter.system_id == PSX || wired_adapter.system_id == PS2) {
-        led_init_cnt = 4;
-    }
-
 #ifdef CONFIG_BLUERETRO_HW2
     for (uint32_t i = 0; i < hw_config.port_cnt; i++) {
         io_conf.pin_bit_mask = 1ULL << sense_list[i];
@@ -702,31 +623,6 @@ void sys_mgr_init(uint32_t package) {
     io_conf.pin_bit_mask = 1ULL << POWER_SENSE_PIN;
     gpio_config(&io_conf);
 #endif
-
-#ifndef CONFIG_BLUERETRO_HW2
-    for (uint32_t i = 0; i < sizeof(led_list); i++) {
-        led_list[i] = hw_config.hw1_ports_led_pins[i];
-    }
-#endif
-
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    for (uint32_t i = 0; i < led_init_cnt; i++) {
-#ifdef CONFIG_BLUERETRO_HW2
-        /* Skip pin 15 if alt sense pin are used */
-        if (sense_list[0] == led_list[i]) {
-            continue;
-        }
-#endif
-        gpio_set_level(led_list[i], 0);
-        io_conf.pin_bit_mask = 1ULL << led_list[i];
-        gpio_config(&io_conf);
-
-        if (i < hw_config.port_cnt) {
-            /* Can't use GPIO mode on port LED as some wired driver overwrite whole GPIO port */
-            /* Use unused LEDC channel 2 to force output low */
-            esp_rom_gpio_connect_out_signal(led_list[i], ledc_periph_signal[LEDC_LOW_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_2, 0, 0);
-        }
-    }
 
 #ifdef CONFIG_BLUERETRO_HW2
     if (hw_config.power_pin_od) {

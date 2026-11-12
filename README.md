@@ -1,28 +1,14 @@
-**This repository has been archived and is no longer under active development or maintenance.**
-
-```
-After 6 years working on BlueRetro, the time has come for me to move on
-and focus on my family and my real job.
-
-The code remains available as-is for reference, learning, and community use,
-but no new features, bug fixes, or pull requests will be accepted.
-
-Thank you to everyone who contributed, tested, reported issues,
-or supported the project over the years.
-Your involvement made BlueRetro what it is today.
-
-If you are looking to build upon this work, please feel free to
-fork the repository in accordance with the license.
-
-Thank you,
-Jacques Gagnon
-```
-
 # BlueRetro
 
 <p align="center"><img src="/static/PNGs/BRE_Logo_Color_Outline.png" width="600"/></p>
 <br>
 <p align="justify">BlueRetro is a multiplayer Bluetooth controllers adapter for various retro game consoles & computers. Lost or broken controllers? Reproduction too expensive? Need those rare and obscure accessories? Just use the Bluetooth devices you already got! The project is open source hardware & software under the CERN-OHL-P-2.0 & Apache-2.0 licenses respectively. It's built for the popular ESP32 chip. Wii, Switch, PS3, PS4, PS5, Xbox One, Xbox Series X|S & generic HID Bluetooth (BR/EDR & LE) devices are supported. Parallel 1P (Computers, NeoGeo, Supergun, JAMMA, Handheld, etc), Parallel 2P (Atari 2600/7800, Master System, Computers, etc), NES, PCE / TG16, Mega Drive / Genesis, SNES, CD-i, 3DO, Jaguar, Saturn, PSX, PC-FX, JVS (Arcade), Virtual Boy, N64, Dreamcast, PS2, GameCube & Wii extension are supported with simultaneous 4+ players using a single adapter.</p>
+
+## Changes from original
+
+- Added interface using a 0.9in OLED screen, with two buttons for interaction.
+- Changed the 4 leds to just one WS2812.
+- Added buzzer with sound effects.
 
 ## READ THIS FIRST
 * [Project documentation](https://github.com/darthcloud/BlueRetro/wiki)

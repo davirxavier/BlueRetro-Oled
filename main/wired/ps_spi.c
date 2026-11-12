@@ -14,7 +14,6 @@
 #include "system/intr.h"
 #include "system/gpio.h"
 #include "system/delay.h"
-#include "system/led.h"
 #include "zephyr/atomic.h"
 #include "zephyr/types.h"
 #include "tools/util.h"

@@ -107,9 +107,45 @@ static void ps4_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_d
     struct ps4_map *map = (struct ps4_map *)bt_data->base.input;
     struct ctrl_meta *meta = bt_data->raw_src_mappings[PAD].meta;
 
-    TESTS_CMDS_LOG("\"wireless_input\": {\"report_id\": %ld, \"axes\": [%u, %u, %u, %u, %u, %u], \"btns\": %lu, \"hat\": %u},\n",
-        bt_data->base.report_id, map->axes[ps4_axes_idx[0]], map->axes[ps4_axes_idx[1]], map->axes[ps4_axes_idx[2]],
-        map->axes[ps4_axes_idx[3]], map->axes[ps4_axes_idx[4]], map->axes[ps4_axes_idx[5]], map->buttons, map->hat & 0xF);
+    uint8_t battery_info = 0;
+    uint8_t battery_level = 0;
+    bool battery_cable = false;
+
+    if (bt_data->base.input_len > 31 && bt_data->base.report_id == 0x11) {
+        battery_info = bt_data->base.input[31];
+        battery_level = battery_info & 0x0F;
+        battery_cable = (battery_info & 0x10) != 0;
+
+        if (battery_level <= 10 || (battery_cable && battery_level == 11)) {
+            bt_data->base.battery_percent =
+                battery_level == 11 ? 100 :
+                battery_level == 10 ? 100 :
+                battery_level * 10 + 5;
+
+            bt_data->base.battery_charging = battery_cable && battery_level <= 10;
+            bt_data->base.battery_full = battery_cable && battery_level == 11;
+            bt_data->base.battery_status = battery_level;
+            bt_data->base.battery_valid = true;
+        } else {
+            bt_data->base.battery_valid = false;
+        }
+    }
+    else
+    {
+        bt_data->base.battery_valid = false;
+    }
+
+    TESTS_CMDS_LOG("\"wireless_input\": {\"report_id\": %ld, \"axes\": [%u, %u, %u, %u, %u, %u], \"btns\": %lu, \"hat\": %u, \"battery_info\": %u, \"battery_level\": %u, \"battery_cable\": %s, \"battery_percent\": %u, \"battery_charging\": %s, \"battery_full\": %s},\n",
+        bt_data->base.report_id,
+        map->axes[ps4_axes_idx[0]], map->axes[ps4_axes_idx[1]],
+        map->axes[ps4_axes_idx[2]], map->axes[ps4_axes_idx[3]],
+        map->axes[ps4_axes_idx[4]], map->axes[ps4_axes_idx[5]],
+        map->buttons, map->hat & 0xF,
+        battery_info, battery_level,
+        battery_cable ? "true" : "false",
+        bt_data->base.battery_percent,
+        bt_data->base.battery_charging ? "true" : "false",
+        bt_data->base.battery_full ? "true" : "false");
 
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data));
 
@@ -151,9 +187,41 @@ static void ps5_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_d
     struct ps5_map *map = (struct ps5_map *)bt_data->base.input;
     struct ctrl_meta *meta = bt_data->raw_src_mappings[PAD].meta;
 
-    TESTS_CMDS_LOG("\"wireless_input\": {\"report_id\": %ld, \"axes\": [%u, %u, %u, %u, %u, %u], \"btns\": %lu, \"hat\": %u},\n",
-        bt_data->base.report_id, map->axes[ps5_axes_idx[0]], map->axes[ps5_axes_idx[1]], map->axes[ps5_axes_idx[2]],
-        map->axes[ps5_axes_idx[3]], map->axes[ps5_axes_idx[4]], map->axes[ps5_axes_idx[5]], map->buttons, map->hat & 0xF);
+    uint8_t battery_info = 0;
+    uint8_t battery_level = 0;
+    uint8_t battery_status = 0;
+    uint8_t battery_percent = 0;
+    bool battery_charging = false;
+    bool battery_full = false;
+
+    if (bt_data->base.input != NULL &&
+        bt_data->base.input_len > 54) {
+
+        battery_info = bt_data->base.input[54];
+        battery_level = battery_info & 0x0F;
+        battery_status = (battery_info >> 4) & 0x0F;
+        battery_percent = battery_level >= 10 ? 100 : battery_level * 10;
+        battery_charging = (battery_status == 1);
+        battery_full = (battery_status == 2);
+
+        bt_data->base.battery_percent = battery_percent;
+        bt_data->base.battery_status = battery_status;
+        bt_data->base.battery_charging = battery_charging;
+        bt_data->base.battery_full = battery_full;
+        bt_data->base.battery_valid = true;
+    } else {
+        bt_data->base.battery_valid = false;
+    }
+
+    TESTS_CMDS_LOG("\"wireless_input\": {\"report_id\": %ld, \"axes\": [%u, %u, %u, %u, %u, %u], \"btns\": %lu, \"hat\": %u, \"battery_info\": %u, \"battery_level\": %u, \"battery_percent\": %u, \"battery_status\": %u, \"battery_charging\": %s, \"battery_full\": %s},\n",
+        bt_data->base.report_id,
+        map->axes[ps5_axes_idx[0]], map->axes[ps5_axes_idx[1]],
+        map->axes[ps5_axes_idx[2]], map->axes[ps5_axes_idx[3]],
+        map->axes[ps5_axes_idx[4]], map->axes[ps5_axes_idx[5]],
+        map->buttons, map->hat & 0xF,
+        battery_info, battery_level, battery_percent, battery_status,
+        battery_charging ? "true" : "false",
+        battery_full ? "true" : "false");
 
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data));
 

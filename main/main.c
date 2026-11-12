@@ -11,11 +11,12 @@
 #include <esp32/rom/ets_sys.h>
 #include <soc/efuse_reg.h>
 #include <esp_efuse.h>
+#include <driver/gpio.h>
+
 #include "system/bare_metal_app_cpu.h"
 #include "system/core0_stall.h"
 #include "system/delay.h"
 #include "system/fs.h"
-#include "system/led.h"
 #include "adapter/adapter.h"
 #include "adapter/adapter_debug.h"
 #include "adapter/config.h"
@@ -28,6 +29,9 @@
 #include "tests/ws_srv.h"
 #include "tests/coverage.h"
 #include "sdkconfig.h"
+#include "interface/int_button.h"
+#include "interface/led_strip_control.h"
+#include "interface/oled_display.h"
 
 static uint32_t chip_package = EFUSE_RD_CHIP_VER_PKG_ESP32D0WDQ6;
 
@@ -90,13 +94,10 @@ static void wl_init_task(void *arg) {
     cov_init();
 #endif
 
-    err_led_init(chip_package);
-
     core0_stall_init();
 
 #ifndef CONFIG_BLUERETRO_QEMU
     if (fs_init()) {
-        err_led_set();
         err = 1;
         printf("FS init fail!\n");
     }
@@ -115,7 +116,6 @@ static void wl_init_task(void *arg) {
 
 #ifndef CONFIG_BLUERETRO_BT_DISABLE
     if (bt_host_init()) {
-        err_led_set();
         err = 1;
         printf("Bluetooth init fail!\n");
     }
@@ -152,6 +152,18 @@ void app_main()
 {
     adapter_init();
 
+#ifndef BLUERETRO_WOKWI
     start_app_cpu(wired_init_task);
     xTaskCreatePinnedToCore(wl_init_task, "wl_init_task", 2560, NULL, 10, NULL, 0);
+#endif
+
+    xTaskCreatePinnedToCore(oled_task, "oled_task", 4096, NULL, 1, NULL, 0);
+
+    ESP_ERROR_CHECK(ws2812_status_init());
+    ws2812_status_set(WS2812_STATUS_BOOTING);
+
+    ESP_ERROR_CHECK(buzzer_init());
+    buzzer_play(BUZZER_SONG_BOOT);
+
+    ESP_ERROR_CHECK(button_init());
 }

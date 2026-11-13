@@ -14,8 +14,6 @@
 #define BUTTON_COOLDOWN_MS 100
 #define BUTTON_POLL_MS 10
 
-static const char *TAG = "BUTTON";
-
 typedef struct {
     gpio_num_t pin;
     uint8_t id;
@@ -47,9 +45,9 @@ static void button_handle_event(button_state_t *button, bool long_press)
     if (!button_cooldown_ready(button, now)) return;
 
     if (button->id == 1) {
-        oled_cmd(long_press ? OLED_CONFIRM : OLED_UP);
+        oled_cmd(long_press ? OLED_BACK : OLED_UP);
     } else {
-        oled_cmd(long_press ? OLED_BACK : OLED_DOWN);
+        oled_cmd(long_press ? OLED_CONFIRM : OLED_DOWN);
     }
 }
 

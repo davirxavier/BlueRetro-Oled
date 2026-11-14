@@ -73,3 +73,4 @@ managed_components
 dependencies.lock
 sdkconfig.*
 !sdkconfig.defaults
+.idea

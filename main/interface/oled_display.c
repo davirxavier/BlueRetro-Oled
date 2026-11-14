@@ -525,7 +525,7 @@ void oled_task(void *arg)
         .iface.i2c = {
             .port = I2C_NUM_0,
             .addr = 0x3C,
-            .rst_gpio = GPIO_NUM_17,
+            .rst_gpio = GPIO_NUM_NC,
         },
     };
 
@@ -651,7 +651,6 @@ static void handle_choosing_move(bool up)
             val = option->max;
         }
 
-        ESP_LOGI("asd", "%d", val);
         option->setter(val);
     }
 }

@@ -1,0 +1,43 @@
+﻿Connection,From,To,Resistor / component between,Notes
+OLED,SDA,ESP32 GPIO17,None,I2C data; no series resistor specified
+OLED,SCL,ESP32 GPIO16,None,I2C clock; no series resistor specified
+OLED,VCC,3.3V,NONE,
+OLED,GND,GND,None,
+Buzzer,Signal,ESP32 GPIO4,None,Confirm buzzer type/current; use a driver transistor if required
+PS2 Port 1,P1 pin 1 DATA,ESP32 GPIO19,33 ohm R1 in series,Keep P1 signal separate from P2
+PS2 Port 1,P1 pin 2 CMD,ESP32 GPIO32,33 ohm R2 in series,Keep P1 signal separate from P2
+PS2 Port 1,P1 pin 6 ATT,ESP32 GPIO34,33 ohm R3 in series,Input-only GPIO; no internal pull-up/down
+PS2 Port 1,P1 pin 7 CLK,ESP32 GPIO33,33 ohm R4 in series,Keep P1 signal separate from P2
+PS2 Port 1,P1 pin 9 ACK,ESP32 GPIO21,33 ohm R5 in series,Keep P1 signal separate from P2
+PS2 Port 1,P1 pin 5 VCC/sense,Q1 NPN base,10 kohm R11 in series,Port-detection input; transistor base
+PS2 Port 1,Q1 NPN base,Common GND / Q1 emitter,100 kohm R12,Base pull-down; resistor from base to ground
+PS2 Port 1,Q1 NPN collector,ESP32 GPIO35,None,Detection node; active-low/inverted logic
+PS2 Port 1,ESP32 GPIO35,3V3 bus,10 kohm R13 pull-up,Pulls detection node HIGH when Q1 is off
+PS2 Port 1,P1 pin 8 NC,Not connected,None,Leave unconnected
+PS2 Port 2,P2 pin 1 DATA,ESP32 GPIO22,33 ohm R6 in series,Keep P2 signal separate from P1
+PS2 Port 2,P2 pin 2 CMD,ESP32 GPIO27,33 ohm R7 in series,Keep P2 signal separate from P1
+PS2 Port 2,P2 pin 6 ATT,ESP32 GPIO5,33 ohm R8 in series,Do not add external pull-up or pull-down
+PS2 Port 2,P2 pin 7 CLK,ESP32 GPIO26,33 ohm R9 in series,Keep P2 signal separate from P1
+PS2 Port 2,P2 pin 9 ACK,ESP32 GPIO25,33 ohm R10 in series,Keep P2 signal separate from P1
+PS2 Port 2,P2 pin 5 VCC/sense,Q2 NPN base,10 kohm R14 in series,Port-detection input; transistor base
+PS2 Port 2,Q2 NPN base,Common GND / Q2 emitter,100 kohm R15,Base pull-down; resistor from base to ground
+PS2 Port 2,Q2 NPN collector,ESP32 GPIO36,None,Detection node; active-low/inverted logic
+PS2 Port 2,ESP32 GPIO36,3V3 bus,10 kohm R16 pull-up,Pulls detection node HIGH when Q2 is off
+PS2 Port 2,P2 pin 8 NC,Not connected,None,Leave unconnected
+External mode selection,3V3 bus,ESP32 GPIO13,None,Tie HIGH for HW2 universal external mode selection
+External mode selection,3V3 bus,ESP32 GPIO14,None,Tie HIGH for HW2 universal external mode selection
+System selection,Common GND,ESP32 GPIO39 / VN,None,Tie LOW for PlayStation selection; input-only GPIO
+Ground,PS2 P1 pin 4 GND,Common GND,Direct wire,"Connect to P2 GND, buck IN-/OUT-, and ESP32 GND"
+Ground,PS2 P2 pin 4 GND,Common GND,Direct wire,"Connect to P1 GND, buck IN-/OUT-, and ESP32 GND"
+ESP32 decoupling,C3 terminal 1 (100 nF ceramic),ESP32 3V3,Direct wire,Place close to ESP32 3V3 and GND pins
+ESP32 decoupling,C3 terminal 2 (100 nF ceramic),ESP32 GND,Direct wire,Non-polarized capacitor
+USB-C Port,VCC,Buck converter IN+,Direct wire,
+USB-C Port,GND,Buck converter IN-,Direct wire,
+Buck converter,OUT+,ESP32 3.3V rail,Direct wire,
+Buck converter,OUT-,ESP32 GND,Direct wire,
+WS2812,DIN,Q3 N-CHANNEL DRAIN,330ohm series,Data input; use common ground; power WS2812 from its rated supply
+WS2812,DIN,Buck converter IN+,10kohm pull-up,
+WS2812,Q3 N-CHANNEL SOURCE,GND,,
+WS2812,Q3 N-CHANNEL GATE,ESP32 GPIO18,330ohm series,
+WS2812,VDD,Buck converter IN+,,
+WS2812,GND,GND,,

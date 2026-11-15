@@ -157,7 +157,7 @@ void app_main()
     xTaskCreatePinnedToCore(wl_init_task, "wl_init_task", 2560, NULL, 10, NULL, 0);
 #endif
 
-    xTaskCreatePinnedToCore(oled_task, "oled_task", 4096, NULL, 1, NULL, 0);
+    ESP_ERROR_CHECK(oled_init_tasks());
 
     ESP_ERROR_CHECK(ws2812_status_init());
     ws2812_status_set(WS2812_STATUS_BOOTING);

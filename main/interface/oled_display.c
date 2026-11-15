@@ -25,6 +25,7 @@ uint8_t oled_current_slot = 0;
 typedef struct {
     bool visible;
     bool selected;
+    bool confirmation;
     const char *title;
     const char *message;
     void (*on_confirm)(bool result);
@@ -145,10 +146,11 @@ static esp_err_t oled_draw_round_rect(ssd1306_handle_t display, int x, int y, in
     return ESP_OK;
 }
 
-static void oled_dialog_show(const char *title, const char *message, void (*callback)(bool))
+static void oled_dialog_show(const char *title, const char *message, bool confirmation, void (*callback)(bool))
 {
     dialog.visible = true;
     dialog.selected = false;
+    dialog.confirmation = confirmation;
     dialog.title = title;
     dialog.message = message;
     dialog.on_confirm = callback;
@@ -177,18 +179,36 @@ static void oled_dialog_draw(void)
     ssd1306_draw_text(display, x + 5, y + 4, dialog.title, false);
 
     // Message
-    ssd1306_draw_text(display, x + 5, y + 16, dialog.message, false);
+    if (dialog.message != NULL)
+    {
+        ssd1306_draw_text(display, x + 5, y + 16, dialog.message, false);
+    }
 
     // Options
-    ssd1306_draw_text(display, x + 22, y + 29, "YES", !dialog.selected);
-    ssd1306_draw_text(display, x + 70, y + 29, "NO", dialog.selected);
+    if (dialog.confirmation)
+    {
+        ssd1306_draw_text(display, x + 22, y + 29, "YES", !dialog.selected);
+        ssd1306_draw_text(display, x + 70, y + 29, "NO", dialog.selected);
+    }
+    else
+    {
+        ssd1306_draw_text(display, x + 22, y + 29, "OK!", !dialog.selected);
+        ssd1306_draw_text(display, x + 70, y + 29, "OK!", dialog.selected);
+    }
+}
+
+static bool oled_current_player_active(void)
+{
+    struct bt_dev* device = NULL;
+    uint8_t index = current_screen == OLED_SCREEN_HOME ? oled_selected_index : oled_current_slot;
+    return bt_host_get_active_dev_from_out_idx(index, &device) >= 0;
 }
 
 static int oled_get_next_player(void)
 {
     for (uint8_t out_idx = 0; out_idx < OLED_MAX_PLAYERS; out_idx++)
     {
-        struct bt_dev *device = NULL;
+        struct bt_dev* device = NULL;
         if (bt_host_get_active_dev_from_out_idx(out_idx, &device) < 0)
         {
             return out_idx;
@@ -198,7 +218,7 @@ static int oled_get_next_player(void)
     return -1;
 }
 
-static void oled_get_status(oled_status_t *status)
+static void oled_get_status(oled_status_t* status)
 {
     memset(status, 0, sizeof(*status));
     status->pairing = bt_host_is_inquiry_active();
@@ -206,25 +226,35 @@ static void oled_get_status(oled_status_t *status)
 
     for (int i = 0; i < OLED_MAX_PLAYERS; i++)
     {
-        struct bt_ids *ids = bt_adapter.data[i].base.pids;
-        oled_player_t *p = &status->players[i];
+        oled_player_t* p = &status->players[i];
         p->connected = false;
-        p->bt_data_base = &bt_adapter.data[i].base;
         p->name = oled_name_unk;
 
-        if (ids && ids->type != BT_NONE)
-        {
-            p->connected = true;
-            p->player = (uint8_t) ids->out_idx;
+        struct bt_dev* device = NULL;
+        int32_t dev_id = bt_host_get_dev_from_out_idx(i, &device);
 
-            if (ids->subtype == BT_SUBTYPE_DEFAULT || (ids->type > BT_NONE && ids->type < BT_TYPE_MAX))
-            {
-                p->name = oled_type_names[ids->type];
-            }
-            else if (ids->subtype > BT_SUBTYPE_DEFAULT && ids->subtype < BT_SUBTYPE_MAX)
-            {
-                p->name = oled_subtype_names[ids->subtype];
-            }
+        if (dev_id < 0 || dev_id >= BT_MAX_DEV || device == NULL)
+        {
+            continue;
+        }
+
+        struct bt_ids* ids = bt_adapter.data[dev_id].base.pids;
+        if (ids == NULL || ids->type == BT_NONE)
+        {
+            continue;
+        }
+
+        p->bt_data_base = &bt_adapter.data[dev_id].base;
+        p->connected = true;
+        p->player = (uint8_t)ids->out_idx;
+
+        if (ids->subtype == BT_SUBTYPE_DEFAULT || (ids->type > BT_NONE && ids->type < BT_TYPE_MAX))
+        {
+            p->name = oled_type_names[ids->type];
+        }
+        else if (ids->subtype > BT_SUBTYPE_DEFAULT && ids->subtype < BT_SUBTYPE_MAX)
+        {
+            p->name = oled_subtype_names[ids->subtype];
         }
     }
 }
@@ -258,59 +288,90 @@ static uint8_t oled_get_text_x_right(ssd1306_handle_t display, const char *text)
     return display->width - size * (display->font->width + 1) - 4;
 }
 
-static void oled_draw_p_home(uint8_t index, int lineStartY)
+static void oled_draw_p_home(uint8_t index, int lineStartY, bool compact)
 {
     const oled_player_t *p = get_i_player(index);
     char buf[32];
     int startLineX = 4;
-    int startLineY = lineStartY + ((display->font->height + 5) * index);
     bool selected = (index == oled_selected_index);
 
-    if (selected) oled_draw_round_rect(display, 1, startLineY - 3, display->width - 2, display->font->height + 6, 3, false);
+    if (selected)
+        oled_draw_round_rect(display, 1, lineStartY - 4, display->width - 2,
+                             compact ? (display->font->height * 2 + 10) : display->font->height + 8,
+                             3, false);
 
-    // Inverted player label
-    snprintf(buf, sizeof(buf), "P%d", index + 1);
+    // Player label
+    snprintf(buf, sizeof(buf), "%s%d", OLED_PLAYER_PREFIX, index + 1);
     int labelWidth = strlen(buf) * (display->font->width + 1) + 1;
     int labelHeight = display->font->height + 2;
-    oled_draw_round_rect(display, startLineX, startLineY - 1, labelWidth, labelHeight, 2, true);
-    ssd1306_draw_text(display, startLineX + 1, startLineY, buf, false);
+
+    oled_draw_round_rect(display, startLineX, lineStartY - 1, labelWidth, labelHeight, 2, true);
+    ssd1306_draw_text(display, startLineX + 1, lineStartY, buf, false);
 
     // Controller name
     snprintf(buf, sizeof(buf), "%s", p != NULL && p->name != NULL && p->connected ? p->name : "--");
-    int name_x = startLineX + labelWidth + 4;
-    ssd1306_draw_text(display, name_x, startLineY, buf, true);
+
+    if (compact)
+        ssd1306_draw_text(display, startLineX, lineStartY + display->font->height + 3, buf, true);
+    else
+        ssd1306_draw_text(display, startLineX + labelWidth + 4, lineStartY, buf, true);
 
     // Battery or connection status
     if (status.pairing && status.pairingIndex >= 0 && index == status.pairingIndex)
-    {
-        strcpy(buf, "PAIRING");
-    }
+        strcpy(buf, OLED_PAIRING);
     else if (p != NULL && p->connected && p->bt_data_base != NULL && p->bt_data_base->battery_valid)
-    {
         snprintf(buf, sizeof(buf), "%u%%", (unsigned int)p->bt_data_base->battery_percent);
-    }
     else if (index == status.pairingIndex)
-    {
-        strcpy(buf, "NEXT");
-    }
+        strcpy(buf, OLED_NEXT);
     else if (p != NULL && p->connected)
-    {
-        strcpy(buf, "ON");
-    }
-    else {
+        strcpy(buf, OLED_ON_STR);
+    else
         strcpy(buf, "--");
-    }
 
-    ssd1306_draw_text(display, oled_get_text_x_right(display, buf) - 6, startLineY, buf, true);
+    if (compact)
+        ssd1306_draw_text(display, oled_get_text_x_right(display, buf),
+                          lineStartY + display->font->height + 3, buf, true);
+    else
+        ssd1306_draw_text(display, oled_get_text_x_right(display, buf),
+                          lineStartY, buf, true);
 }
 
-static size_t get_options_count(uint8_t screen)
+static void oled_draw_players_home(int lineStartY)
+{
+    const uint8_t count = OLED_MAX_PLAYERS;
+
+    if (count <= 2)
+    {
+        int rowHeight = display->height / count - 8;
+
+        for (uint8_t i = 0; i < count; i++)
+        {
+            int y = i * rowHeight + lineStartY;
+            oled_draw_p_home(i, y, true);
+        }
+    }
+    else
+    {
+        for (uint8_t i = 0; i < count; i++)
+        {
+            int y = lineStartY + ((display->font->height + 5) * i);
+            oled_draw_p_home(i, y, false);
+        }
+    }
+}
+
+static bool should_list_option(oled_screen_option_t *option)
+{
+    return option != NULL && option->screen == current_screen && (option->should_appear == NULL || option->should_appear());
+}
+
+static size_t get_options_count()
 {
     size_t options_count = 0;
 
     for (size_t i = 0; i < oled_screen_options_count; i++)
     {
-        if (screen == oled_screen_options[i].screen)
+        if (should_list_option(&oled_screen_options[i]))
         {
             options_count++;
         }
@@ -326,7 +387,7 @@ static oled_screen_option_t *get_selected_option()
 
     for (size_t i = 0; i < oled_screen_options_count; i++)
     {
-        if (current_screen != oled_screen_options[i].screen)
+        if (!should_list_option(&oled_screen_options[i]))
         {
             continue;
         }
@@ -345,7 +406,7 @@ static oled_screen_option_t *get_selected_option()
 
 static void oled_draw_scroll_screen(uint8_t lineStartY)
 {
-    size_t options_count = get_options_count(current_screen);
+    size_t options_count = get_options_count();
     if (oled_selected_index >= options_count)
     {
         oled_selected_index = options_count - 1;
@@ -356,7 +417,7 @@ static void oled_draw_scroll_screen(uint8_t lineStartY)
     size_t matching_index = 0;
     for (size_t i = 0; i < oled_screen_options_count; i++)
     {
-        if (current_screen != oled_screen_options[i].screen)
+        if (!should_list_option(&oled_screen_options[i]))
             continue;
 
         if (matching_index >= first_visible && matching_index < first_visible + OLED_CURR_OPTIONS_LEN)
@@ -395,7 +456,7 @@ static void oled_draw_scroll_screen(uint8_t lineStartY)
 
         switch (option->type)
         {
-            case OLED_OPTION_TYPE_NUM:
+        case OLED_OPTION_TYPE_NUM:
                 snprintf(valueBuf, sizeof(valueBuf), "%d%s", optionValue, option->suffix);
                 break;
 
@@ -465,13 +526,10 @@ static void oled_draw_content()
     if (current_screen == OLED_SCREEN_HOME)
     {
         ssd1306_draw_text(display, horizontalPadding, headerStartY, "BLUE_RETR0", true);
-        const char *bt_status = status.pairing ? "PAIRING" : "READY";
+        const char *bt_status = status.pairing ? OLED_PAIRING : OLED_READY;
         ssd1306_draw_text(display, oled_get_text_x_right(display, bt_status), headerStartY, bt_status, true);
 
-        for (uint8_t i = 0; i < OLED_MAX_PLAYERS; i++)
-        {
-            oled_draw_p_home(i, pStartY);
-        }
+        oled_draw_players_home(pStartY);
     }
     else if (current_screen >= OLED_SCREEN_SETTINGS)
     {
@@ -480,7 +538,7 @@ static void oled_draw_content()
         ssd1306_draw_line(display, 0, lineY, display->width-1, lineY, true);
 
         char name[32];
-        snprintf(name, sizeof(name), "SLOT%d", oled_current_slot+1);
+        snprintf(name, sizeof(name), "%s%d", OLED_PLAYER_PREFIX, oled_current_slot+1);
         ssd1306_draw_text(display, oled_get_text_x_right(display, name), headerStartY, name, true);
 
         oled_draw_scroll_screen(pStartY);
@@ -502,7 +560,44 @@ void oled_config_save(void)
     config_update(config_get_src());
 }
 
-void oled_task(void *arg)
+static void oled_cmd_critical(oled_cmd_t cmd)
+{
+    if (event_queue == NULL) return;
+
+    if (xQueueSendToFront(event_queue, &cmd, portMAX_DELAY) != pdTRUE)
+    {
+        ESP_LOGW("OLED", "Event queue full");
+    }
+}
+
+static void oled_task(void *arg)
+{
+    oled_cmd_t cmd;
+    while (1)
+    {
+        if (xQueueReceive(event_queue, &cmd, pdMS_TO_TICKS(1000)) == pdTRUE)
+        {
+            oled_cmd_process(cmd);
+        }
+
+        oled_update();
+    }
+}
+
+static void oled_update_task(void *arg)
+{
+    while (1)
+    {
+        if (current_screen != OLED_SCREEN_HOME && !oled_current_player_active())
+        {
+            oled_cmd_critical(OLED_RETURN_HOME);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+esp_err_t oled_init_tasks()
 {
     // Initialize I2C
     i2c_master_bus_config_t bus_cfg = {
@@ -531,21 +626,22 @@ void oled_task(void *arg)
 
     ESP_ERROR_CHECK(ssd1306_new_i2c(&cfg, &display));
     event_queue = xQueueCreate(10, sizeof(oled_cmd_t));
-    if (event_queue == NULL)
-    {
+    if (event_queue == NULL) {
         ESP_LOGE("OLED", "Event queue creation failed");
+        return ESP_ERR_NO_MEM;
     }
 
-    oled_cmd_t cmd;
-    while (1)
-    {
-        if (xQueueReceive(event_queue, &cmd, pdMS_TO_TICKS(1000)) == pdTRUE)
-        {
-            oled_cmd_process(cmd);
-        }
-
-        oled_update();
+    if (xTaskCreatePinnedToCore(oled_task, "oled_task", 4096, NULL, 1, NULL, 0) != pdPASS) {
+        ESP_LOGE("OLED", "Failed to create oled_task");
+        return ESP_ERR_NO_MEM;
     }
+
+    if (xTaskCreatePinnedToCore(oled_update_task, "oled_update_task", 1024, NULL, 5, NULL, 0) != pdPASS) {
+        ESP_LOGE("OLED", "Failed to create oled_update_task");
+        return ESP_ERR_NO_MEM;
+    }
+
+    return ESP_OK;
 }
 
 void oled_update_vals()
@@ -596,6 +692,24 @@ static void do_reconnect(bool acc)
 
 }
 
+static void confirm_choosing()
+{
+    is_choosing = false;
+    oled_config_save();
+    started_choosing_value = 0;
+}
+
+static void do_confirm_option(bool acc)
+{
+    if (!acc)
+    {
+        return;
+    }
+
+    confirm_choosing();
+    oled_dialog_show("Success!", "Wait a few seconds for refresh.", false, NULL);
+}
+
 static void handle_option(const oled_screen_option_t *option)
 {
     if (option == NULL)
@@ -603,11 +717,13 @@ static void handle_option(const oled_screen_option_t *option)
         return;
     }
 
-    if (is_choosing)
+    if (is_choosing && option->on_confirm_event == OLED_OPTION_EVENT_CONFIRM)
     {
-        is_choosing = false;
-        oled_config_save();
-        started_choosing_value = 0;
+        oled_dialog_show("Confirm Action", "", true, do_confirm_option);
+    }
+    else if (is_choosing)
+    {
+        confirm_choosing();
     }
     else if (option->type == OLED_OPTION_TYPE_NUM || option->type == OLED_OPTION_TYPE_OPT)
     {
@@ -622,7 +738,7 @@ static void handle_option(const oled_screen_option_t *option)
     {
         case OLED_OPTION_EVENT_RECONNECT:
         {
-            oled_dialog_show("Confirm reconnect?", "", do_reconnect);
+            oled_dialog_show("Confirm reconnect?", NULL, true, do_reconnect);
             break;
         }
         default: ;
@@ -632,27 +748,37 @@ static void handle_option(const oled_screen_option_t *option)
 static void handle_choosing_move(bool up)
 {
     oled_screen_option_t *option = get_selected_option();
-    if (option == NULL || option->type == OLED_OPTION_NONE)
+    if (option == NULL || option->type == OLED_OPTION_NONE ||  option->setter == NULL)
     {
         return;
     }
 
-    if (option->type == OLED_OPTION_TYPE_NUM && option->setter != NULL)
+    int val = option->getter != NULL ? option->getter() : option->def;
+    val += up ? option->step : -option->step;
+
+    int min;
+    int max;
+    if (option->type == OLED_OPTION_TYPE_NUM)
     {
-        int val = option->getter != NULL ? option->getter() : option->def;
-        val += up ? option->step : -option->step;
-
-        if (val < option->min)
-        {
-            val = option->min;
-        }
-        else if (val > option->max)
-        {
-            val = option->max;
-        }
-
-        option->setter(val);
+        min = option->min;
+        max = option->max;
     }
+    else if (OLED_OPTION_TYPE_OPT)
+    {
+        min = 0;
+        max = option->option_list_len-1;
+    }
+
+    if (val < min)
+    {
+        val = min;
+    }
+    else if (val > max)
+    {
+        val = max;
+    }
+
+    option->setter(val);
 }
 
 static void oled_cmd_process(oled_cmd_t cmd)
@@ -694,7 +820,7 @@ static void oled_cmd_process(oled_cmd_t cmd)
                 break;
             }
 
-            size_t options_count = isHome ? OLED_MAX_PLAYERS : get_options_count(current_screen);
+            size_t options_count = isHome ? OLED_MAX_PLAYERS : get_options_count();
 
             if (options_count > 0 && oled_selected_index < options_count - 1)
             {
@@ -721,8 +847,9 @@ static void oled_cmd_process(oled_cmd_t cmd)
 
                 if (current_screen == OLED_SCREEN_HOME)
                 {
-                    oled_current_slot = oled_selected_index;
-                    new_screen = OLED_SCREEN_SETTINGS;
+                    bool has_player = oled_current_player_active();
+                    oled_current_slot = has_player ? oled_selected_index : oled_current_slot;
+                    new_screen = has_player ? OLED_SCREEN_SETTINGS : -1;
                 }
                 else
                 {
@@ -769,6 +896,14 @@ static void oled_cmd_process(oled_cmd_t cmd)
             }
 
             oled_navigate_back();
+            break;
+        }
+        case OLED_RETURN_HOME:
+        {
+            oled_current_slot = 0;
+            oled_selected_index = 0;
+            current_screen = 0;
+            navigation_depth = 0;
             break;
         }
         default: ;

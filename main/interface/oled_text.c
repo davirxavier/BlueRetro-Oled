@@ -29,8 +29,8 @@ const char *oled_subtype_names[BT_SUBTYPE_MAX] = {
 
 const char *oled_name_unk = "Unknown";
 
-#if OLED_LANG == EN
 const char *oled_screen_names[OLED_SCREEN_MAX] = {
+#if OLED_LANG == 0
     [OLED_SCREEN_HOME] = "Home",
     [OLED_SCREEN_SETTINGS] = "Settings",
     [OLED_SCREEN_DIAGNOSTICS] = "Diagnostics",
@@ -42,8 +42,17 @@ const char *oled_screen_names[OLED_SCREEN_MAX] = {
     [OLED_SCREEN_RECONNECT] = "Reconnect",
     [OLED_SCREEN_DISCONNECT] = "Disconnect",
     [OLED_SCREEN_ASSIGN_PLAYER] = "Assign Player",
-    [OLED_SCREEN_AUTO_ASSIGN_PLAYER] = "Auto Assign",
-};
-#elif OLED_LANG == PTBR
+#elif OLED_LANG == 1
+    [OLED_SCREEN_HOME] = "Home",
+    [OLED_SCREEN_SETTINGS] = "Configs",
+    [OLED_SCREEN_DIAGNOSTICS] = "Diagnosticos",
+    [OLED_SCREEN_PLAYER_SETTINGS] = "Jogador",
+    [OLED_SCREEN_BUTTON_SETTINGS] = "Botoes",
+    [OLED_SCREEN_STICK_SETTINGS] = "Joystick",
+    [OLED_SCREEN_VIBRATION_SETTINGS] = "Vibracao",
 
+    [OLED_SCREEN_RECONNECT] = "Reconectar",
+    [OLED_SCREEN_DISCONNECT] = "Desconectar",
+    [OLED_SCREEN_ASSIGN_PLAYER] = "Alterar Jogador",
 #endif
+};

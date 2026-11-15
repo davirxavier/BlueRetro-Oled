@@ -12,8 +12,9 @@
 #define CONFIG_MAGIC_V1 0xF380D824
 #define CONFIG_MAGIC_V2 0x1782DB8A
 #define CONFIG_MAGIC_V3 0xAB89C69A
-#define CONFIG_MAGIC CONFIG_MAGIC_V3
-#define CONFIG_VERSION 3
+#define CONFIG_MAGIC_V4 0xC7E41B62
+#define CONFIG_MAGIC CONFIG_MAGIC_V4
+#define CONFIG_VERSION 4
 #define ADAPTER_MAPPING_MAX 128
 #define CONFIG_BANKSEL_MAX 4
 #define CONFIG_BANKSEL_DBG 0xDB
@@ -22,6 +23,11 @@ enum {
     DEFAULT_CFG = 0,
     GAMEID_CFG,
 };
+
+struct bt_dev_cfg {
+    uint8_t bdaddr[6];
+    uint8_t out_idx; // 0 = automatic, 1+ = manually selected slot
+} __packed;
 
 struct map_cfg {
     uint8_t src_btn;
@@ -58,6 +64,7 @@ struct config {
     struct global_cfg global_cfg;
     struct out_cfg out_cfg[WIRED_MAX_DEV];
     struct in_cfg in_cfg[WIRED_MAX_DEV];
+    struct bt_dev_cfg bt_dev_cfg[BT_MAX_DEV];
 } __packed;
 
 struct hw_config {
@@ -107,5 +114,6 @@ void config_init(uint32_t src);
 void config_update(uint32_t dst);
 uint32_t config_get_src(void);
 void config_debug_log(void);
+void config_set_bt_dev_out_idx(uint8_t *bdaddr, uint8_t out_idx);
 
 #endif /* _CONFIG_H_ */

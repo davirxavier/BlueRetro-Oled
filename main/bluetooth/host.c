@@ -751,3 +751,12 @@ bool bt_host_is_inquiry_active(void)
 {
     return bt_hci_get_inquiry();
 }
+
+uint8_t bt_host_get_manual_out_idx(struct bt_dev *device) {
+    for (uint32_t i = 0; i < BT_MAX_DEV; i++) {
+        if (memcmp(config.bt_dev_cfg[i].bdaddr, "\0\0\0\0\0\0", 6) != 0 && memcmp(config.bt_dev_cfg[i].bdaddr, device->remote_bdaddr, 6) == 0) {
+            return config.bt_dev_cfg[i].out_idx;
+        }
+    }
+    return 0;
+}

@@ -4,6 +4,7 @@
 #include "oled_option_text.h"
 #include "adapter/config.h"
 #include "adapter/adapter.h"
+#include "bluetooth/host.h"
 
 static const uint8_t left_stick_src[] = {PAD_LX_LEFT, PAD_LX_RIGHT, PAD_LY_UP, PAD_LY_DOWN};
 static const uint8_t left_stick_src_size = sizeof(left_stick_src) / sizeof(left_stick_src[0]);
@@ -113,9 +114,53 @@ static void set_rmax(uint8_t value)
     oled_set_stick_max(oled_current_slot, right_stick_src, right_stick_src_size, value);
 }
 
+static bool is_manual_slot_used(uint8_t* bdaddr, uint8_t out_idx)
+{
+    for (uint32_t i = 0; i < BT_MAX_DEV; i++)
+    {
+        struct bt_dev_cfg* cfg = &config.bt_dev_cfg[i];
 
-static const char *confirm_options[] = {"Y", "N"};
-static const size_t confirm_options_len = sizeof(confirm_options) / sizeof(confirm_options[0]);
+        if (cfg->out_idx == out_idx && memcmp(cfg->bdaddr, bdaddr, 6) != 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static uint8_t get_assigned_player()
+{
+    struct bt_dev* device = NULL;
+    int ret = bt_host_get_dev_from_out_idx(oled_current_slot, &device);
+    return ret < 0 ? 0 : ret;
+}
+
+static void set_assigned_player(uint8_t val)
+{
+    struct bt_dev *device = NULL;
+    int32_t dev_id = bt_host_get_dev_from_out_idx(oled_current_slot, &device);
+
+    if (dev_id < 0 || device == NULL)
+    {
+        return;
+    }
+
+    if (val >= OLED_MAX_PLAYERS)
+    {
+        return;
+    }
+
+    uint8_t out_idx = (val == 9) ? 0 : val + 1;
+
+    if (out_idx > 0 && is_manual_slot_used(device->remote_bdaddr, out_idx))
+    {
+        return;
+    }
+
+    config_set_bt_dev_out_idx(device->remote_bdaddr, out_idx);
+}
+
 static const char *assign_options[] = {"P1", "P2", "P3", "P4"};
 static const size_t assign_options_len = sizeof(assign_options) / sizeof(assign_options[0]);
 
@@ -210,14 +255,8 @@ oled_screen_option_t oled_screen_options[] = {
         .option_list = assign_options,
         .option_list_len = assign_options_len,
         .on_confirm_event = OLED_OPTION_EVENT_CONFIRM,
-    },
-    { // LOCK
-        .screen = OLED_SCREEN_PLAYER_SETTINGS,
-        .type = OLED_OPTION_TYPE_OPT,
-        .name = oled_option_name_lock,
-        .option_list = confirm_options,
-        .option_list_len = confirm_options_len,
-        .on_confirm_event = OLED_OPTION_EVENT_ASSIGN_LOCK,
+        .getter = get_assigned_player,
+        .setter = set_assigned_player,
     },
 
     // STICK

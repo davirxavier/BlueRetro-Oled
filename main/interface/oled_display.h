@@ -5,22 +5,46 @@
 #ifndef BLUE_RETRO_DUAL_PIO_OLED_DISPLAY_H
 #define BLUE_RETRO_DUAL_PIO_OLED_DISPLAY_H
 
+#define OLED_LANG 1
 #ifndef OLED_LANG
-#define OLED_LANG EN
+#define OLED_LANG BR_OLED_LANG
 #endif
 
+#include <sdkconfig.h>
 #include <stdint.h>
 #include "adapter/adapter.h"
 #include "adapter/config.h"
 #include "buzzer.h"
 
-#define OLED_MAX_PLAYERS 4
+// #define OLED_MAX_PLAYERS 2
+#ifndef OLED_MAX_PLAYERS
+#define OLED_MAX_PLAYERS CONFIG_BR_OLED_MAX_PLAYERS
+#endif
+
+// #define STRINGIFY(x) #x
+// #define TOSTRING(x) STRINGIFY(x)
+// #pragma message("Number of players set to " TOSTRING(CONFIG_BR_OLED_MAX_PLAYERS)) TEST
+
+#if OLED_LANG == 0
+#define OLED_PLAYER_PREFIX "P"
+#define OLED_PAIRING "PARIRING"
+#define OLED_NEXT "NEXT"
+#define OLED_ON_STR "ON"
+#define OLED_READY "READY"
+#elif OLED_LANG == 1
+#define OLED_PLAYER_PREFIX "J"
+#define OLED_PAIRING "PAREANDO"
+#define OLED_NEXT "PROX"
+#define OLED_ON_STR "ON"
+#define OLED_READY "PRONTO"
+#endif
 
 typedef struct {
     bool connected;
     const char *name;
     uint8_t player;
     struct bt_data_base *bt_data_base;
+    struct bt_dev_cfg *bt_dev_cfg;
 } oled_player_t;
 
 typedef struct {
@@ -36,6 +60,7 @@ typedef enum
     OLED_CONFIRM,
     OLED_BACK,
     OLED_REFRESH,
+    OLED_RETURN_HOME,
     OLED_CMD_MAX,
 } oled_cmd_t;
 
@@ -59,7 +84,6 @@ enum
     OLED_SCREEN_RECONNECT,
     OLED_SCREEN_DISCONNECT,
     OLED_SCREEN_ASSIGN_PLAYER,
-    OLED_SCREEN_AUTO_ASSIGN_PLAYER,
 
     OLED_SCREEN_MAX,
 };
@@ -95,10 +119,11 @@ typedef struct
     const char suffix[3];
     const char *name;
     const char **option_list;
-    size_t option_list_len;
+    uint8_t option_list_len;
     uint8_t on_confirm_event;
     uint8_t (*getter)(void);
     void (*setter)(uint8_t);
+    bool (*should_appear)(void);
 } oled_screen_option_t;
 
 extern oled_screen_option_t oled_screen_options[];
@@ -110,7 +135,7 @@ extern const char *oled_screen_names[OLED_SCREEN_MAX];
 extern uint8_t oled_current_slot;
 
 void oled_config_save(void);
-void oled_task(void *arg);
+esp_err_t oled_init_tasks();
 void oled_cmd(oled_cmd_t cmd);
 void oled_update_vals();
 

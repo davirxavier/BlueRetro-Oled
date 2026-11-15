@@ -110,6 +110,7 @@ static uint32_t config_version_magic[] = {
     CONFIG_MAGIC_V1,
     CONFIG_MAGIC_V2,
     CONFIG_MAGIC_V3,
+    CONFIG_MAGIC_V4,
 };
 static uint8_t config_default_combo[BR_COMBO_CNT] = {
     PAD_LM, PAD_RM, PAD_MM, PAD_RB_UP, PAD_RB_LEFT, PAD_RB_RIGHT, PAD_RB_DOWN, PAD_LD_UP, PAD_LD_DOWN, PAD_MS
@@ -123,11 +124,13 @@ static int32_t config_store_on_file(struct config *data, char *filename);
 static int32_t config_v0_update(struct config *data, char *filename);
 static int32_t config_v1_update(struct config *data, char *filename);
 static int32_t config_v2_update(struct config *data, char *filename);
+static int32_t config_v3_update(struct config *data, char *filename);
 
 static int32_t (*config_ver_update[])(struct config *data, char *filename) = {
     config_v0_update,
     config_v1_update,
     config_v2_update,
+    config_v3_update,
     NULL,
 };
 
@@ -205,6 +208,12 @@ static int32_t config_v2_update(struct config *data, char *filename) {
     return config_store_on_file(data, filename);
 }
 
+static int32_t config_v3_update(struct config *data, char *filename) {
+    memset(data->bt_dev_cfg, 0, sizeof(data->bt_dev_cfg));
+    data->magic = CONFIG_MAGIC_V4;
+    return config_store_on_file(data, filename);
+}
+
 static int32_t hw_config_lookup_key_name(const char* key) {
     for (uint32_t i = 0; i < sizeof(hw_config_name_idx)/sizeof(*hw_config_name_idx); i++) {
         if (strstr(key, hw_config_name_idx[i]) != NULL) {
@@ -220,6 +229,7 @@ static void config_init_struct(struct config *data) {
     data->global_cfg.multitap_cfg = MT_NONE;
     data->global_cfg.inquiry_mode = INQ_AUTO;
     data->global_cfg.banksel = 0;
+    memset(data->bt_dev_cfg, 0, sizeof(data->bt_dev_cfg));
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
         data->out_cfg[i].dev_mode = DEV_PAD;
@@ -498,4 +508,26 @@ void config_debug_log(void) {
         bt_mon_log(true, "Mapping config #0");
         bt_mon_tx(BT_MON_SYS_NOTE, (uint8_t *)config.in_cfg[0].map_cfg,
             config.in_cfg[0].map_size * sizeof(config.in_cfg[0].map_cfg[0]));
+}
+
+void config_set_bt_dev_out_idx(uint8_t *bdaddr, uint8_t out_idx) {
+    int32_t free_idx = -1;
+
+    for (uint32_t i = 0; i < BT_MAX_DEV; i++) {
+        if (memcmp(config.bt_dev_cfg[i].bdaddr, bdaddr, 6) == 0) {
+            config.bt_dev_cfg[i].out_idx = out_idx;
+            config_update(DEFAULT_CFG);
+            return;
+        }
+
+        if (free_idx < 0 && memcmp(config.bt_dev_cfg[i].bdaddr, "\0\0\0\0\0\0", 6) == 0) {
+            free_idx = i;
+        }
+    }
+
+    if (free_idx >= 0) {
+        memcpy(config.bt_dev_cfg[free_idx].bdaddr, bdaddr, 6);
+        config.bt_dev_cfg[free_idx].out_idx = out_idx;
+        config_update(DEFAULT_CFG);
+    }
 }

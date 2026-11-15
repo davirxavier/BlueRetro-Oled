@@ -210,7 +210,6 @@ static void power_on_hdl(void) {
 #endif /* CONFIG_BLUERETRO_HW2 */
 }
 
-
 static void wired_port_hdl(void) {
     uint32_t update = 0;
     uint16_t port_mask = 0;
@@ -229,7 +228,8 @@ static void wired_port_hdl(void) {
 #ifdef CONFIG_BLUERETRO_HW2
         int32_t prev_idx = device->ids.out_idx;
 #endif
-        device->ids.out_idx = idx;
+        uint8_t manual_idx = bt_host_get_manual_out_idx(device) - 1;
+        device->ids.out_idx = manual_idx && manual_idx < hw_config.port_cnt && sense_port_is_empty(manual_idx) ? manual_idx : idx;
         if ((hw_config.hotplug && bt_ready) || !hw_config.hotplug) {
             port_mask |= BIT(idx) | adapter_get_out_mask(idx);
         }

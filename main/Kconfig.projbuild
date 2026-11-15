@@ -1,12 +1,26 @@
 menu "BlueRetro"
 
+    config BR_OLED_MAX_PLAYERS
+        int "Maximum OLED players"
+        range 1 4
+        default 2
+        help
+            Maximum number of players displayed on the OLED.
+
+    config BR_OLED_LANG
+        int "OLED language"
+        range 0 1
+        default 0
+        help
+            0 = English
+            1 = Brazilian Portuguese
+
     config BLUERETRO_HW2
         bool "Enable support for HW2 features"
         default y
         help
             Select this to enable HW2 features like port detection.
 
-    choice
         prompt "Select universal or specific system"
         default BLUERETRO_SYSTEM_UNIVERSAL
         help
